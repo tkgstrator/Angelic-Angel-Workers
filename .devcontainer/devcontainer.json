@@ -1,0 +1,81 @@
+{
+  "name": "Hono Workers",
+  "dockerComposeFile": ["compose.yaml"],
+  "service": "app",
+  "workspaceFolder": "/home/vscode/app",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "vscode",
+  "remoteEnv": {
+    "CODEX_HOME": "${containerWorkspaceFolder}/.codex",
+    "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
+    "ANTHROPIC_BASE_URL": "${localEnv:ANTHROPIC_BASE_URL}",
+    "ANTHROPIC_AUTH_TOKEN": "${localEnv:ANTHROPIC_AUTH_TOKEN}",
+    "CLOUDFLARE_ACCOUNT_ID": "${localEnv:CLOUDFLARE_ACCOUNT_ID}",
+    "CLOUDFLARE_API_TOKEN": "${localEnv:CLOUDFLARE_API_TOKEN}",
+    "WAKATIME_API_KEY": "${localEnv:WAKATIME_API_KEY}",
+    "OPENAI_API_KEY": "${localEnv:OPENAI_API_KEY}",
+    "OPENAI_BASE_URL": "${localEnv:OPENAI_BASE_URL}"
+  },
+  "containerEnv": {
+    "CLAUDE_CONFIG_DIR": "/home/vscode/.claude",
+    "CODEX_HOME": "${containerWorkspaceFolder}/.codex",
+    "CODEX_MODEL": "${localEnv:CODEX_MODEL}"
+  },
+  "mounts": [
+    "source=${localEnv:HOME}/.aws,target=/home/vscode/.aws,type=bind,consistency=cached,readonly",
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.codex,target=/home/vscode/.codex,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,consistency=cached,readonly",
+    "source=${localEnv:HOME}/.config/gh,target=/home/vscode/.config/gh,type=bind,consistency=cached,readonly"
+  ],
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "configureZshAsDefaultShell": true
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/shyim/devcontainers-features/bun:0": {},
+    "ghcr.io/devcontainers/features/node:1.5.0": {
+      "version": "26.5.0"
+    },
+    "ghcr.io/stu-bell/devcontainer-features/claude-code:0": {
+      "version": "latest"
+    },
+    "ghcr.io/thamaji/devcontainer-features/codex-cli:1": {
+      "VERSION": "latest"
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "moby": false,
+      "dockerDashComposeVersion": "v2"
+    },
+    "ghcr.io/dhoeric/features/act:1": {},
+    "ghcr.io/devcontainers-community/features/direnv:1": {},
+    "ghcr.io/rocker-org/devcontainer-features/apt-packages:1": {
+      "packages": "git-filter-repo"
+    }
+  },
+  // The codex-cli feature's postCreateCommand ends by deleting itself, but
+  // it sits in a root-owned directory while lifecycle commands run as vscode
+  // — so the `rm` fails, `set -e` aborts it, and the CLI then skips every
+  // remaining user command, including the two below. onCreate runs a phase
+  // earlier than any postCreate, so handing the directory over here lets the
+  // feature clean itself up.
+  "onCreateCommand": "sudo chown \"$(id -un)\" /usr/local/codex-cli 2>/dev/null || true",
+  "postAttachCommand": "/bin/sh .devcontainer/postAttachCommand.sh",
+  "postCreateCommand": "/bin/sh .devcontainer/postCreateCommand.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "EditorConfig.EditorConfig",
+        "PKief.material-icon-theme",
+        "WakaTime.vscode-wakatime",
+        "antfu.file-nesting",
+        "bierner.github-markdown-preview",
+        "bierner.markdown-preview-github-styles",
+        "biomejs.biome",
+        "ms-vscode.vscode-typescript-next",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml"
+      ]
+    }
+  }
+}

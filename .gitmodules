@@ -1,0 +1,3 @@
+[submodule "biome-plugins"]
+	path = biome-plugins
+	url = https://github.com/qtmleap/biome-plugins.git

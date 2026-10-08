@@ -1,0 +1,176 @@
+name: Update Dependencies
+on:
+  schedule:
+    # Weekly on Mondays at 09:00 UTC (18:00 JST).
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Cache Bun install
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('**/bun.lock', '**/package.json') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Read current toolchain versions
+        id: current-versions
+        run: |
+          CURRENT_NODE_VERSION=$(jq -r '.features["ghcr.io/devcontainers/features/node:1.5.0"].version // empty' .devcontainer/devcontainer.json)
+          CURRENT_NODE_MAJOR=$(echo "$CURRENT_NODE_VERSION" | cut -d. -f1)
+          echo "node_major=$CURRENT_NODE_MAJOR" >> $GITHUB_OUTPUT
+
+          CURRENT_BUN_VERSION=$(bun --version)
+          CURRENT_BUN_MAJOR=$(echo "$CURRENT_BUN_VERSION" | cut -d. -f1)
+          echo "bun_major=$CURRENT_BUN_MAJOR" >> $GITHUB_OUTPUT
+
+          CURRENT_PACKAGE_VERSION=$(jq -r '.version' package.json)
+          echo "package_version=$CURRENT_PACKAGE_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Latest Node.js version
+        id: node-version
+        run: |
+          LATEST=$(curl -s https://nodejs.org/dist/index.json | jq -r '.[0].version' | sed 's/^v//')
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "major=$(echo "$LATEST" | cut -d. -f1)" >> $GITHUB_OUTPUT
+
+      - name: Latest Bun version
+        id: bun-version
+        run: |
+          LATEST=$(curl -s https://api.github.com/repos/oven-sh/bun/releases/latest | jq -r '.tag_name' | sed 's/^bun-v//')
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "major=$(echo "$LATEST" | cut -d. -f1)" >> $GITHUB_OUTPUT
+
+      - name: Update devcontainer.json (Node pin)
+        if: steps.current-versions.outputs.node_major != ''
+        run: |
+          jq --arg v "${{ steps.node-version.outputs.version }}" \
+             '.features["ghcr.io/devcontainers/features/node:1.5.0"].version = $v' \
+             .devcontainer/devcontainer.json > .devcontainer/devcontainer.json.tmp
+          mv .devcontainer/devcontainer.json.tmp .devcontainer/devcontainer.json
+
+      - name: Snapshot deps before update
+        run: |
+          jq -r '(.dependencies // {}) + (.devDependencies // {}) | to_entries[] | "\(.key)@\(.value)"' \
+            package.json | sort > /tmp/deps-before.txt
+
+      - name: bun update --latest
+        run: bun update --latest
+
+      - name: Detect major dep updates
+        id: dep-changes
+        run: |
+          jq -r '(.dependencies // {}) + (.devDependencies // {}) | to_entries[] | "\(.key)@\(.value)"' \
+            package.json | sort > /tmp/deps-after.txt
+          HAS_MAJOR_UPDATE=false
+          while IFS= read -r before_line; do
+            pkg_name=$(echo "$before_line" | sed 's/@[^^]*$//' | sed 's/@.*//')
+            before_v=$(echo "$before_line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            [ -z "$before_v" ] && continue
+            after_line=$(grep "^${pkg_name}@" /tmp/deps-after.txt || true)
+            [ -z "$after_line" ] && continue
+            after_v=$(echo "$after_line" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+            [ -z "$after_v" ] && continue
+            if [ "$(echo "$before_v" | cut -d. -f1)" != "$(echo "$after_v" | cut -d. -f1)" ]; then
+              echo "Major update: $pkg_name $before_v -> $after_v"
+              HAS_MAJOR_UPDATE=true
+            fi
+          done < /tmp/deps-before.txt
+          echo "has_major_update=$HAS_MAJOR_UPDATE" >> $GITHUB_OUTPUT
+
+      - name: Any changes?
+        id: changes
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Determine version bump
+        id: version-bump
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          BUMP_TYPE="patch"
+          [ "${{ steps.dep-changes.outputs.has_major_update }}" = "true" ] && BUMP_TYPE="minor"
+          if [ -n "${{ steps.current-versions.outputs.node_major }}" ] \
+            && [ "${{ steps.current-versions.outputs.node_major }}" != "${{ steps.node-version.outputs.major }}" ]; then
+            BUMP_TYPE="major"
+          fi
+          if [ "${{ steps.current-versions.outputs.bun_major }}" != "${{ steps.bun-version.outputs.major }}" ]; then
+            BUMP_TYPE="major"
+          fi
+          echo "type=$BUMP_TYPE" >> $GITHUB_OUTPUT
+
+      - name: Compute next version
+        id: new-version
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          CURRENT="${{ steps.current-versions.outputs.package_version }}"
+          BUMP="${{ steps.version-bump.outputs.type }}"
+          IFS='.' read -r major minor patch <<< "$CURRENT"
+          case "$BUMP" in
+            major) NEW="$((major + 1)).0.0" ;;
+            minor) NEW="${major}.$((minor + 1)).0" ;;
+            patch) NEW="${major}.${minor}.$((patch + 1))" ;;
+          esac
+          echo "version=$NEW" >> $GITHUB_OUTPUT
+
+      - name: Bump package.json version
+        if: steps.changes.outputs.has_changes == 'true'
+        run: |
+          jq --arg v "${{ steps.new-version.outputs.version }}" '.version = $v' \
+             package.json > package.json.tmp
+          mv package.json.tmp package.json
+
+      - name: Create Pull Request
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v8
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore: update dependencies to v${{ steps.new-version.outputs.version }}"
+          title: "chore: Update dependencies (v${{ steps.current-versions.outputs.package_version }} → v${{ steps.new-version.outputs.version }})"
+          body: |
+            ## Summary
+
+            **Version bump: `${{ steps.version-bump.outputs.type }}`** (`${{ steps.current-versions.outputs.package_version }}` → `${{ steps.new-version.outputs.version }}`)
+
+            ### devcontainer.json
+            - Node.js: `${{ steps.node-version.outputs.version }}`
+
+            ### package.json
+            - `bun update --latest` applied to all dependencies
+            - Dependency major update detected: `${{ steps.dep-changes.outputs.has_major_update }}`
+
+            ### Version bump rules
+
+            | Condition | Bump |
+            |---|---|
+            | Only patch/minor dep updates | patch |
+            | Any dependency major update | minor |
+            | Node.js or Bun major update | major |
+
+            ---
+            *Auto-generated by the Update Dependencies workflow.*
+          branch: chore/update-dependencies
+          delete-branch: true
+          labels: |
+            dependencies
+            automated

@@ -1,5 +1,27 @@
 {
   "name": "x-push-probe",
+  "version": "0.1.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy --minify",
+    "typecheck": "tsc --noEmit",
+    "lint": "bunx --bun biome check",
+    "format": "bunx --bun biome check --write",
+    "test": "bun test",
+    "cf-typegen": "wrangler types --env-interface CloudflareBindings"
+  },
+  "dependencies": {
+    "@commitlint/config-conventional": "^21.2.0",
+    "commitlint": "^21.2.1",
+    "conventional-changelog-conventionalcommits": "^10.2.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2",
+    "@cloudflare/workers-types": "^4",
+    "@types/bun": "^1",
+    "typescript": "^7",
+    "wrangler": "^4"
+  }
 }
