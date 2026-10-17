@@ -7,6 +7,15 @@ on:
   pull_request:
 
 jobs:
+  ci-change-scope:
+    permissions:
+      contents: read
+    uses: ./.github/workflows/ci-change-scope.yaml
+    with:
+      doc-paths: '["AGENTS.md","CLAUDE.md","docs/development/ci-change-scope.md"]'
+      doc-prefixes: '[]'
+      runner: '"ubuntu-latest"'
+
   commitlint:
     name: Commit Lint
     runs-on: ubuntu-latest
@@ -93,14 +102,19 @@ jobs:
         run: bun run typecheck
 
   test:
+    if: ${{ !cancelled() && (true) }}
+    needs: ["ci-change-scope"]
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON((needs['ci-change-scope'].result == 'success' && needs['ci-change-scope'].outputs.docs_only == 'true') && '"ubuntu-latest"' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v5
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
       - uses: oven-sh/setup-bun@v2
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         with:
           bun-version: latest
       - name: Cache Bun install
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         uses: actions/cache@v4
         with:
           path: ~/.bun/install/cache
@@ -108,9 +122,20 @@ jobs:
           restore-keys: |
             bun-${{ runner.os }}-
       - name: Install dependencies
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: bun install --frozen-lockfile --ignore-scripts
       # Uncomment when the project uses Prisma (or similar codegen).
       # - name: Generate Prisma client
       #   run: bun run prisma generate
       - name: Run tests
+        if: ${{ (needs['ci-change-scope'].result != 'success' || needs['ci-change-scope'].outputs.docs_only != 'true') }}
         run: bun test
+
+      - name: Docs-only exemption
+        if: ${{ needs['ci-change-scope'].result == 'success' && needs['ci-change-scope'].outputs.docs_only == 'true' }}
+        shell: bash
+        working-directory: .
+        env:
+          CI_CHANGE_REASON: ${{ needs['ci-change-scope'].outputs.reason }}
+        run: |
+          printf '%s\n' "$CI_CHANGE_REASON" >> "$GITHUB_STEP_SUMMARY"
