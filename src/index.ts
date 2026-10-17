@@ -46,7 +46,14 @@ export class Inbox extends DurableObject<Env> {
 
   list(limit: number): Received[] {
     return this.ctx.storage.sql
-      .exec<{ at: string; method: string; path: string; headers: string; body: string; body_bytes: number }>(
+      .exec<{
+        at: string
+        method: string
+        path: string
+        headers: string
+        body: string
+        body_bytes: number
+      }>(
         'SELECT at, method, path, headers, body, body_bytes FROM received ORDER BY id DESC LIMIT ?',
         limit,
       )
@@ -91,6 +98,9 @@ export default {
       return new Response(null, { status: 410 })
     }
     // Push services answer 201 Created on accepted messages (RFC 8030 §5).
-    return new Response(null, { status: 201, headers: { Location: `/push/${env.PROBE_TOKEN}/${crypto.randomUUID()}` } })
+    return new Response(null, {
+      status: 201,
+      headers: { Location: `/push/${env.PROBE_TOKEN}/${crypto.randomUUID()}` },
+    })
   },
 } satisfies ExportedHandler<Env>
