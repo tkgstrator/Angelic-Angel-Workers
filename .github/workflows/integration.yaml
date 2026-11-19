@@ -91,6 +91,10 @@ jobs:
         continue-on-error: true
       - name: Type check
         run: bun run typecheck
+      - name: Validate production bundle and bindings
+        run: bunx wrangler deploy --env= --dry-run --outdir /tmp/angelic-production
+      - name: Validate staging bundle and bindings
+        run: bunx wrangler deploy --env staging --dry-run --outdir /tmp/angelic-staging
 
   test:
     name: Test
@@ -100,6 +104,9 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
       - name: Cache Bun install
         uses: actions/cache@v4
         with:
@@ -113,4 +120,4 @@ jobs:
       # - name: Generate Prisma client
       #   run: bun run prisma generate
       - name: Run tests
-        run: bun test
+        run: bun run test

@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["bun"],
+    "lib": ["ESNext", "DOM"]
+  },
+  "include": ["__tests__/**/*.ts", "src/ece.ts", "src/autopush.ts", "src/x.ts"]
+}

@@ -27,16 +27,22 @@ jobs:
             bun-${{ runner.os }}-
 
       - name: Determine environment
+        env:
+          ANGELIC_TARGET_BRANCH: ${{ github.event.pull_request.base.ref || github.ref_name }}
+          ANGELIC_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          if [[ '${{ github.event.pull_request.base.ref }}' == '${{ github.event.repository.default_branch }}' ]] \
-            || [[ '${{ github.event_name }}' == 'workflow_dispatch' && '${{ github.ref_name }}' == '${{ github.event.repository.default_branch }}' ]]; then
-            echo "ENVIRONMENT=production" >> $GITHUB_ENV
+          if [[ "$ANGELIC_TARGET_BRANCH" == "$ANGELIC_DEFAULT_BRANCH" ]]; then
+            echo "DEPLOY_COMMAND=deploy --env= --minify" >> $GITHUB_ENV
           else
-            echo "ENVIRONMENT=staging" >> $GITHUB_ENV
+            echo "DEPLOY_COMMAND=deploy --env staging --minify" >> $GITHUB_ENV
           fi
 
       - name: Install dependencies
         run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Read installed Wrangler version
+        id: wrangler
+        run: bun -e "const p = await Bun.file('node_modules/wrangler/package.json').json(); console.log('version=' + p.version)" >> "$GITHUB_OUTPUT"
 
       # Uncomment when the project uses Prisma (or similar codegen).
       # - name: Generate Prisma client
@@ -45,7 +51,7 @@ jobs:
       - name: Wrangler deploy
         uses: cloudflare/wrangler-action@v3
         with:
-          wranglerVersion: latest
+          wranglerVersion: ${{ steps.wrangler.outputs.version }}
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy --env ${{ env.ENVIRONMENT }} --minify src/index.ts
+          command: ${{ env.DEPLOY_COMMAND }}

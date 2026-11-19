@@ -3,10 +3,69 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "workers_dev": true,
-  "observability": { "enabled": true },
-  "vars": { "MODE": "record" },
-  "durable_objects": {
-    "bindings": [{ "name": "INBOX", "class_name": "Inbox" }]
+  "observability": {
+    "enabled": true
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Inbox"] }]
+  "vars": {
+    "MODE": "record"
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "INBOX",
+        "class_name": "Inbox"
+      },
+      {
+        "name": "ANGELIC",
+        "class_name": "Angelic"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["Inbox"]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["Angelic"]
+    }
+  ],
+  "triggers": {
+    "crons": ["*/5 * * * *"]
+  },
+  "env": {
+    "staging": {
+      "name": "x-push-probe-staging",
+      "workers_dev": true,
+      "vars": {
+        "MODE": "record"
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "INBOX",
+            "class_name": "Inbox"
+          },
+          {
+            "name": "ANGELIC",
+            "class_name": "Angelic"
+          }
+        ]
+      },
+      "migrations": [
+        {
+          "tag": "v1",
+          "new_sqlite_classes": ["Inbox"]
+        },
+        {
+          "tag": "v2",
+          "new_sqlite_classes": ["Angelic"]
+        }
+      ],
+      "triggers": {
+        "crons": ["*/5 * * * *"]
+      }
+    }
+  }
 }
